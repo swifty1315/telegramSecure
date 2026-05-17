@@ -1,0 +1,33 @@
+{
+  "originHash" : "84ac5e9f9687f3df3f1215551ceae0013096efe06783541937bf990d1e45c0d1",
+  "pins" : [
+    {
+      "identity" : "swinject",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/Swinject/Swinject.git",
+      "state" : {
+        "revision" : "b685b549fe4d8ae265fc7a2f27d0789720425d69",
+        "version" : "2.10.0"
+      }
+    },
+    {
+      "identity" : "tdlibframework",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/Swiftgram/TDLibFramework",
+      "state" : {
+        "revision" : "49aac3ea0ece35f11739eaf03a94a49e77a1b859",
+        "version" : "1.8.63-8921c22f"
+      }
+    },
+    {
+      "identity" : "tdlibkit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/Swiftgram/TDLibKit",
+      "state" : {
+        "revision" : "3cbc253298103910f70a9a7d8fe5eae3328f7a6f",
+        "version" : "1.5.2-tdlib-1.8.63-8921c22f"
+      }
+    }
+  ],
+  "version" : 3
+}

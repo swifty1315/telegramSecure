@@ -6,56 +6,44 @@
 //
 
 import SwiftUI
-import SwiftData
 
 struct ContentView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query private var items: [Item]
+
+    @StateObject private var authorizationViewModel: Authorization.ViewModel.Impl
+
+    init(authorizationViewModel: Authorization.ViewModel.Impl) {
+
+        _authorizationViewModel = StateObject(wrappedValue: authorizationViewModel)
+    }
 
     var body: some View {
-        NavigationSplitView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))")
-                    } label: {
-                        Text(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))
-                    }
-                }
-                .onDelete(perform: deleteItems)
-            }
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    EditButton()
-                }
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
-                    }
-                }
-            }
-        } detail: {
-            Text("Select an item")
-        }
-    }
 
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(timestamp: Date())
-            modelContext.insert(newItem)
-        }
-    }
-
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            for index in offsets {
-                modelContext.delete(items[index])
+        Group {
+            if authorizationViewModel.phase == .authorized {
+                AppTabs.View(viewModel: authorizationViewModel.appTabsViewModel)
+            } else {
+                NavigationStack {
+                    Authorization.View(viewModel: authorizationViewModel)
+                }
             }
+        }
+        .task {
+            authorizationViewModel.onAppear()
+        }
+        .onChange(of: authorizationViewModel.chatsListViewModel.hasAuthorizationExpired) { _, hasAuthorizationExpired in
+            guard hasAuthorizationExpired else {
+                return
+            }
+
+            authorizationViewModel.handleAuthorizationExpired()
         }
     }
 }
 
 #Preview {
-    ContentView()
-        .modelContainer(for: Item.self, inMemory: true)
+    ContentView(
+        authorizationViewModel: AppDependency.resolveAuthorizationViewModel(
+            from: AppDependency.makeContainer()
+        )
+    )
 }
