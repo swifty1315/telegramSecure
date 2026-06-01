@@ -39,6 +39,7 @@ extension Storage {
 
             static let authorizationSession = "storage.authorizationSession"
             static let tdlibDatabaseEncryptionKey = "storage.tdlibDatabaseEncryptionKey"
+            static let secureStorageMasterKey = "storage.secureStorageMasterKey"
 
         } // Key
 
@@ -46,9 +47,11 @@ extension Storage {
 
             func data(for key: String) -> Data? {
 
-                let query = makeQuery(for: key)
-                var result: AnyObject?
+                var query = makeBaseQuery(for: key)
+                query[kSecReturnData as String] = true
+                query[kSecMatchLimit as String] = kSecMatchLimitOne
 
+                var result: AnyObject?
                 let status = SecItemCopyMatching(query as CFDictionary, &result)
 
                 guard status == errSecSuccess else {
@@ -60,32 +63,32 @@ extension Storage {
 
             func setData(_ data: Data, for key: String) {
 
-                let query = makeQuery(for: key)
+                let query = makeBaseQuery(for: key)
                 let attributes = [kSecValueData as String: data] as CFDictionary
                 let status = SecItemUpdate(query as CFDictionary, attributes)
 
-                if status == errSecItemNotFound {
-                    var createQuery = query
-                    createQuery[kSecValueData as String] = data
-                    createQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-
-                    SecItemAdd(createQuery as CFDictionary, nil)
+                guard status == errSecItemNotFound else {
+                    return
                 }
+
+                var createQuery = query
+                createQuery[kSecValueData as String] = data
+                createQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+
+                SecItemAdd(createQuery as CFDictionary, nil)
             }
 
             func removeValue(for key: String) {
 
-                SecItemDelete(makeQuery(for: key) as CFDictionary)
+                SecItemDelete(makeBaseQuery(for: key) as CFDictionary)
             }
 
-            private func makeQuery(for key: String) -> [String: Any] {
+            private func makeBaseQuery(for key: String) -> [String: Any] {
 
                 [
                     kSecClass as String: kSecClassGenericPassword,
                     kSecAttrService as String: serviceName,
                     kSecAttrAccount as String: key,
-                    kSecReturnData as String: true,
-                    kSecMatchLimit as String: kSecMatchLimitOne,
                 ]
             }
 

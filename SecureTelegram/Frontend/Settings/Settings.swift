@@ -31,6 +31,14 @@ struct Settings {
             container.register((any Settings.DialogsEncryption.ViewModel.Interface).self) { _ in
                 Settings.DialogsEncryption.ViewModel.Impl(resolver: resolver)
             }
+
+            container.register(Settings.DialogsEncryption.Setup.ViewModel.Impl.self) { _ in
+                Settings.DialogsEncryption.Setup.ViewModel.Impl(resolver: resolver)
+            }
+
+            container.register((any Settings.DialogsEncryption.Setup.ViewModel.Interface).self) { _ in
+                Settings.DialogsEncryption.Setup.ViewModel.Impl(resolver: resolver)
+            }
         }
 
     } // Factory

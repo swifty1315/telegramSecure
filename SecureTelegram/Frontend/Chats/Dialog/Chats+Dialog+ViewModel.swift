@@ -12,6 +12,14 @@ extension Chats.Dialog {
 
     struct ViewModel {
 
+        struct MessageSection: Identifiable, Equatable {
+
+            let id: Date
+            let day: Date
+            let messages: [Chats.Dialog.Message]
+
+        } // MessageSection
+
         @MainActor
         protocol Interface: ObservableObject {
 
@@ -20,6 +28,7 @@ extension Chats.Dialog {
             var subtitle: String { get }
             var avatarLocalPath: String? { get }
             var messages: [Chats.Dialog.Message] { get }
+            var messageSections: [MessageSection] { get }
             var composerViewModel: Chats.Dialog.Composer.ViewModel.Impl { get }
             var isLoading: Bool { get }
             var emptyTitle: String { get }
@@ -32,6 +41,7 @@ extension Chats.Dialog {
                 avatarLocalPath: String?
             )
             func onAppear()
+            func onDisappear()
             func refresh()
 
         } // Interface

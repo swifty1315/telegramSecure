@@ -6,12 +6,14 @@
 //
 
 import SwiftUI
+import Combine
 
 extension Settings.DialogsEncryption {
 
     struct View: SwiftUI.View {
 
         @ObservedObject var viewModel: Settings.DialogsEncryption.ViewModel.Impl
+        @StateObject private var router = Settings.DialogsEncryption.Router()
 
         var body: some SwiftUI.View {
 
@@ -20,12 +22,28 @@ extension Settings.DialogsEncryption {
                     loadingView
                 } else if let errorMessage = viewModel.errorMessage, viewModel.items.isEmpty {
                     errorView(message: errorMessage)
+                } else if viewModel.items.isEmpty {
+                    emptyView
                 } else {
                     listView
                 }
             }
             .task {
                 viewModel.onAppear()
+            }
+            .onReceive(viewModel.$action.compactMap { $0 }) { action in
+                switch action {
+                case .openSetup:
+                    router.route = .setup
+                }
+
+                viewModel.consumeAction()
+            }
+            .navigationDestination(item: $router.route) { route in
+                switch route {
+                case .setup:
+                    Settings.DialogsEncryption.Setup.View(viewModel: viewModel.setupViewModel)
+                }
             }
             .navigationTitle(viewModel.navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
@@ -39,6 +57,21 @@ extension Settings.DialogsEncryption {
                     .foregroundStyle(Color.secondaryText)
 
                 ProgressView()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .padding(24)
+        }
+
+        private var emptyView: some SwiftUI.View {
+
+            VStack(alignment: .leading, spacing: 12) {
+                Text(viewModel.emptyTitle)
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color.text)
+
+                Text(viewModel.emptyMessage)
+                    .font(.body)
+                    .foregroundStyle(Color.secondaryText)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .padding(24)
@@ -64,8 +97,13 @@ extension Settings.DialogsEncryption {
             List {
                 Section {
                     ForEach(viewModel.items) { item in
-                        row(item: item)
-                            .listRowInsets(.init(top: 10, leading: 16, bottom: 10, trailing: 16))
+                        Button {
+                            viewModel.didTapDialog(item)
+                        } label: {
+                            row(item: item)
+                        }
+                        .buttonStyle(.plain)
+                        .listRowInsets(.init(top: 10, leading: 16, bottom: 10, trailing: 16))
                     }
                 } header: {
                     Text(viewModel.subtitle)

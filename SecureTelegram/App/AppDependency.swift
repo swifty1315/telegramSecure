@@ -15,6 +15,7 @@ struct AppDependency {
         let container = Container()
 
         Storage.Factory.register(with: container)
+        Crypto.Factory.register(with: container)
         TelegramClient.Factory.register(with: container)
         Networking.Factory.register(with: container)
         Authorization.Factory.register(with: container)

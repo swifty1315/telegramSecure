@@ -115,6 +115,11 @@ extension TelegramClient.Controller {
             )
         }
 
+        func messageEvents(chatID: Int64) -> AsyncStream<Chats.Dialog.Event> {
+
+            bridge.messageEvents(chatID: chatID)
+        }
+
         func sendMessage(
             chatID: Int64,
             text: String,

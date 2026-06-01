@@ -14,14 +14,24 @@ extension Settings.DialogsEncryption.ViewModel {
     @MainActor
     final class Impl: Interface {
 
+        enum Action: Equatable {
+
+            case openSetup
+
+        } // Action
+
         init(resolver: Resolver) {
 
             self.controller = resolver.resolve(Chats.List.Controller.Interface.self)!
+            self.setupViewModel = resolver.resolve(Settings.DialogsEncryption.Setup.ViewModel.Impl.self)!
         }
 
+        @Published var action: Action?
         @Published private(set) var items: [Chats.List.Item] = []
         @Published private(set) var isLoading = false
         @Published private(set) var errorMessage: String?
+
+        let setupViewModel: Settings.DialogsEncryption.Setup.ViewModel.Impl
 
         var navigationTitle: String {
 
@@ -30,7 +40,17 @@ extension Settings.DialogsEncryption.ViewModel {
 
         var subtitle: String {
 
-            "Customize your dialog encryption"
+            "Customize encryption for private dialogs."
+        }
+
+        var emptyTitle: String {
+
+            "No private dialogs"
+        }
+
+        var emptyMessage: String {
+
+            "Private Telegram conversations will appear here when TDLib loads them."
         }
 
         func onAppear() {
@@ -54,6 +74,17 @@ extension Settings.DialogsEncryption.ViewModel {
             }
         }
 
+        func didTapDialog(_ item: Chats.List.Item) {
+
+            setupViewModel.configure(dialog: item)
+            action = .openSetup
+        }
+
+        func consumeAction() {
+
+            action = nil
+        }
+
         private let controller: any Chats.List.Controller.Interface
         private var didLoad = false
 
@@ -65,6 +96,7 @@ extension Settings.DialogsEncryption.ViewModel {
 
             do {
                 items = try await controller.fetchDialogs(limit: 100)
+                    .filter { $0.kind == .privateDialog }
             } catch {
                 errorMessage = makeErrorMessage(from: error)
             }

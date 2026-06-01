@@ -44,6 +44,9 @@ extension Chats.Dialog {
             .task {
                 viewModel.onAppear()
             }
+            .onDisappear {
+                viewModel.onDisappear()
+            }
             .background(Color(.systemBackground))
             .navigationTitle(viewModel.navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
@@ -125,13 +128,22 @@ extension Chats.Dialog {
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 10) {
-                        ForEach(viewModel.messages) { message in
-                            messageRow(message)
-                                .id(message.id)
+                    LazyVStack(
+                        alignment: .leading,
+                        spacing: 10,
+                        pinnedViews: [.sectionHeaders]
+                    ) {
+                        ForEach(viewModel.messageSections) { section in
+                            Section {
+                                ForEach(section.messages) { message in
+                                    messageRow(message)
+                                        .id(message.id)
+                                }
+                            } header: {
+                                sectionHeader(for: section.day)
+                            }
                         }
                     }
-
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
                 }
@@ -141,10 +153,26 @@ extension Chats.Dialog {
                 .onAppear {
                     scrollToLastMessage(using: proxy, animated: false)
                 }
-                .onChange(of: viewModel.messages.map(\.id)) { _, _ in
-                    scrollToLastMessage(using: proxy, animated: false)
-                }
+
             }
+        }
+
+        private func sectionHeader(for day: Date) -> some SwiftUI.View {
+
+            HStack {
+                Spacer()
+
+                Text(formattedDay(for: day))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color.secondaryText)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .glassHeaderBackground()
+
+                Spacer()
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 4)
         }
 
         private func messageRow(_ message: Chats.Dialog.Message) -> some SwiftUI.View {
@@ -297,6 +325,19 @@ extension Chats.Dialog {
             return Self.timeFormatter.string(from: Date(timeIntervalSince1970: TimeInterval(timestamp)))
         }
 
+        private func formattedDay(for day: Date) -> String {
+
+            if Calendar.current.isDateInToday(day) {
+                return "Today"
+            }
+
+            if Calendar.current.isDateInYesterday(day) {
+                return "Yesterday"
+            }
+
+            return Self.dayFormatter.string(from: day)
+        }
+
         private func imageAspectRatio(for message: Chats.Dialog.Message) -> CGFloat {
 
             guard let imageWidth = message.imageWidth,
@@ -344,7 +385,7 @@ extension Chats.Dialog {
             }
 
             if animated {
-                withAnimation(.easeOut(duration: 0.2)) {
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
                     scroll()
                 }
             } else {
@@ -372,6 +413,13 @@ extension Chats.Dialog {
             let formatter = DateFormatter()
             formatter.dateStyle = .none
             formatter.timeStyle = .short
+            return formatter
+        }()
+
+        private static let dayFormatter: DateFormatter = {
+            let formatter = DateFormatter()
+            formatter.dateStyle = .medium
+            formatter.timeStyle = .none
             return formatter
         }()
 
@@ -527,5 +575,19 @@ private extension Chats.Dialog.View {
         }
 
     } // ImagePreviewOverlay
+
+}
+
+private extension SwiftUI.View {
+
+    @ViewBuilder
+    func glassHeaderBackground() -> some SwiftUI.View {
+
+        if #available(iOS 26.0, *) {
+            self.glassEffect(.regular, in: .rect(cornerRadius: 14))
+        } else {
+            self.background(.ultraThinMaterial, in: Capsule())
+        }
+    }
 
 }

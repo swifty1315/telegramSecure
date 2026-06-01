@@ -12,14 +12,37 @@ extension Chats.List {
 
     struct ViewModel {
 
+        enum Filter: String, CaseIterable, Identifiable, Equatable {
+
+            case all
+            case privateDialogs
+            case groups
+
+            var id: String {
+                rawValue
+            }
+
+            var title: String {
+                switch self {
+                case .all:
+                    return "All"
+                case .privateDialogs:
+                    return "Dialogs"
+                case .groups:
+                    return "Groups"
+                }
+            }
+
+        } // Filter
+
         @MainActor
         protocol Interface: ObservableObject {
 
             var action: Chats.List.ViewModel.Impl.Action? { get set }
             var navigationTitle: String { get }
-            var title: String { get }
-            var subtitle: String { get }
+            var chipsViewModel: Controls.Chips.ViewModel { get }
             var items: [Chats.List.Item] { get }
+            var hasAnyItems: Bool { get }
             var isLoading: Bool { get }
             var emptyTitle: String { get }
             var emptyMessage: String { get }

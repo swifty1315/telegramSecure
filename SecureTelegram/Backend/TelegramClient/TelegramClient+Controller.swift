@@ -32,6 +32,8 @@ extension TelegramClient {
                 limit: Int
             ) async throws -> [Chats.Dialog.Message]
 
+            func messageEvents(chatID: Int64) -> AsyncStream<Chats.Dialog.Event>
+
             func sendMessage(
                 chatID: Int64,
                 text: String,

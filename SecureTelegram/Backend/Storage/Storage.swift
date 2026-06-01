@@ -16,6 +16,7 @@ struct Storage {
 
             Storage.Defaults.Factory.register(with: container)
             Storage.Keychain.Factory.register(with: container)
+            Storage.Secure.Factory.register(with: container)
             Storage.AuthState.Factory.register(with: container)
             Storage.TelegramRuntime.Factory.register(with: container)
         }

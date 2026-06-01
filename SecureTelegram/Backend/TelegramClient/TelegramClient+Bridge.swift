@@ -38,6 +38,8 @@ extension TelegramClient {
                 limit: Int
             ) async throws -> [Chats.Dialog.Message]
 
+            func messageEvents(chatID: Int64) -> AsyncStream<Chats.Dialog.Event>
+
             func sendMessage(
                 chatID: Int64,
                 text: String,
@@ -429,6 +431,24 @@ extension TelegramClient {
 #endif
             }
 
+            func messageEvents(chatID: Int64) -> AsyncStream<Chats.Dialog.Event> {
+
+                AsyncStream { continuation in
+                    let subscriptionID = UUID()
+
+                    eventQueue.sync {
+                        messageEventContinuations[subscriptionID] = .init(
+                            chatID: chatID,
+                            continuation: continuation
+                        )
+                    }
+
+                    continuation.onTermination = { [weak self] _ in
+                        self?.removeMessageEventSubscription(subscriptionID)
+                    }
+                }
+            }
+
             func sendMessage(
                 chatID: Int64,
                 text: String,
@@ -518,7 +538,16 @@ extension TelegramClient {
             private var state: TelegramClient.AuthorizationState = .waitTdlibParameters
             private var pendingContinuation: CheckedContinuation<TelegramClient.AuthorizationState, Swift.Error>?
             private var pendingStateMatcher: ((TelegramClient.AuthorizationState) -> Bool)?
+            private let eventQueue = DispatchQueue(label: "SecureTelegram.TelegramClient.Bridge.Events")
+            private var messageEventContinuations: [UUID: MessageEventSubscription] = [:]
             private let logger = Logger.telegramClient
+
+            private struct MessageEventSubscription {
+
+                let chatID: Int64
+                let continuation: AsyncStream<Chats.Dialog.Event>.Continuation
+
+            } // MessageEventSubscription
 
 #if canImport(TDLibKit)
             private var manager: TDLibClientManager?
@@ -588,6 +617,59 @@ extension TelegramClient {
                 }
             }
 
+            nonisolated private func removeMessageEventSubscription(_ subscriptionID: UUID) {
+
+                eventQueue.sync {
+                    messageEventContinuations[subscriptionID] = nil
+                }
+            }
+
+            private func publishMessageEvent(
+                _ event: Chats.Dialog.Event,
+                chatID: Int64
+            ) {
+
+                let continuations = eventQueue.sync {
+                    messageEventContinuations.values
+                        .filter { $0.chatID == chatID }
+                        .map(\.continuation)
+                }
+
+                continuations.forEach { continuation in
+                    continuation.yield(event)
+                }
+            }
+
+            private func int64Value(from value: Any?) -> Int64? {
+
+                if let value = value as? Int64 {
+                    return value
+                }
+
+                if let value = value as? Int {
+                    return Int64(value)
+                }
+
+                if let value = value as? NSNumber {
+                    return value.int64Value
+                }
+
+                if let value = value as? String {
+                    return Int64(value)
+                }
+
+                return nil
+            }
+
+            private func int64Values(from value: Any?) -> [Int64] {
+
+                guard let values = value as? [Any] else {
+                    return []
+                }
+
+                return values.compactMap { int64Value(from: $0) }
+            }
+
 #if canImport(TDLibKit)
             private func makeClientIfNeeded() -> TDLibClient {
 
@@ -630,9 +712,27 @@ extension TelegramClient {
                 }
 
                 guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                      let type = object["@type"] as? String,
-                      type == "updateAuthorizationState",
-                      let authorizationState = object["authorization_state"] as? [String: Any],
+                      let type = object["@type"] as? String else {
+                    return
+                }
+
+                switch type {
+                case "updateAuthorizationState":
+                    handleAuthorizationUpdate(object, client: client)
+                case "updateNewMessage":
+                    handleNewMessageUpdate(object, client: client)
+                case "updateMessageContent":
+                    handleMessageContentUpdate(object)
+                case "updateDeleteMessages":
+                    handleDeleteMessagesUpdate(object)
+                default:
+                    return
+                }
+            }
+
+            private func handleAuthorizationUpdate(_ object: [String: Any], client: TDLibClient) {
+
+                guard let authorizationState = object["authorization_state"] as? [String: Any],
                       let authorizationType = authorizationState["@type"] as? String else {
                     return
                 }
@@ -665,6 +765,63 @@ extension TelegramClient {
                 default:
                     publish(.unknown(authorizationType))
                 }
+            }
+
+            private func decodeMessage(from object: [String: Any]) throws -> Message {
+
+                let data = try JSONSerialization.data(withJSONObject: object)
+                return try JSONDecoder().decode(Message.self, from: data)
+            }
+
+            private func handleNewMessageUpdate(_ object: [String: Any], client: TDLibClient) {
+
+                guard let messageObject = object["message"] as? [String: Any] else {
+                    return
+                }
+
+                Task {
+                    do {
+                        let message = try decodeMessage(from: messageObject)
+                        let dialogMessage = try await makeDialogMessage(
+                            from: message,
+                            using: client
+                        )
+
+                        publishMessageEvent(
+                            .messageInserted(dialogMessage),
+                            chatID: dialogMessage.chatID
+                        )
+                    } catch {
+                        if let chatID = int64Value(from: messageObject["chat_id"]) {
+                            publishMessageEvent(.refreshRequired(chatID: chatID), chatID: chatID)
+                        }
+
+                        logger.warning("*** TDLIB bridge failed to decode updateNewMessage: \(self.makeErrorMessage(from: error), privacy: .public).")
+                    }
+                }
+            }
+
+            private func handleMessageContentUpdate(_ object: [String: Any]) {
+
+                guard let chatID = int64Value(from: object["chat_id"]) else {
+                    return
+                }
+
+                publishMessageEvent(.refreshRequired(chatID: chatID), chatID: chatID)
+            }
+
+            private func handleDeleteMessagesUpdate(_ object: [String: Any]) {
+
+                guard let chatID = int64Value(from: object["chat_id"]) else {
+                    return
+                }
+
+                let messageIDs = int64Values(from: object["message_ids"])
+
+                publishMessageEvent(
+                    .messagesDeleted(chatID: chatID, messageIDs: messageIDs),
+                    chatID: chatID
+                )
             }
 
             private func makeAuthorizedUser(using client: TDLibClient) async -> TelegramClient.User? {
@@ -789,9 +946,20 @@ extension TelegramClient {
                         from: chat.photo,
                         using: client
                     ),
+                    kind: makeDialogKind(from: chat.type),
                     unreadCount: chat.unreadCount,
                     lastMessageDate: chat.lastMessage?.date ?? 0
                 )
+            }
+
+            private func makeDialogKind(from type: ChatType) -> Chats.List.Item.Kind {
+
+                switch type {
+                case .chatTypePrivate, .chatTypeSecret:
+                    return .privateDialog
+                case .chatTypeBasicGroup, .chatTypeSupergroup:
+                    return .group
+                }
             }
 
             private func makeDialogMessage(

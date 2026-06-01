@@ -22,7 +22,7 @@ extension Chats.List {
                     loadingView
                 } else if let errorMessage = viewModel.errorMessage, viewModel.items.isEmpty {
                     errorView(message: errorMessage)
-                } else if viewModel.items.isEmpty {
+                } else if viewModel.items.isEmpty && viewModel.hasAnyItems == false {
                     emptyView
                 } else {
                     listView
@@ -52,22 +52,8 @@ extension Chats.List {
 
         private var loadingView: some SwiftUI.View {
 
-            VStack(alignment: .leading, spacing: 12) {
-                Text(viewModel.title)
-
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color.text)
-
-                Text(viewModel.subtitle)
-
-                    .font(.body)
-                    .foregroundStyle(Color.secondaryText)
-
-                ProgressView()
-            }
-
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .padding(24)
+            ProgressView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
 
         private var emptyView: some SwiftUI.View {
@@ -109,44 +95,44 @@ extension Chats.List {
         private var listView: some SwiftUI.View {
 
             List {
-
                 Section {
-
-                    ForEach(viewModel.items) { item in
-
-                        row(item: item)
-
-                            .listRowInsets(.init(top: 10, leading: 16, bottom: 10, trailing: 16))
-                            .listRowSeparator(.hidden)
+                    if viewModel.items.isEmpty {
+                        filteredEmptyRow
+                    } else {
+                        ForEach(viewModel.items) { item in
+                            row(item: item)
+                                .listRowInsets(.init(top: 10, leading: 16, bottom: 10, trailing: 16))
+                                .listRowSeparator(.hidden)
+                        }
                     }
+                } header: {
+                    chipsHeader
                 }
-
-//                Section {
-//
-//                    
-//
-//                } header: {
-//
-//                    VStack(alignment: .leading, spacing: 8) {
-//
-//                        Text(viewModel.title)
-//
-//                            .font(.system(size: 28, weight: .bold, design: .rounded))
-//                            .foregroundStyle(Color.text)
-//
-//                        Text(viewModel.subtitle)
-//
-//                            .font(.body)
-//                            .foregroundStyle(Color.secondaryText)
-//                    }
-//                    .textCase(nil)
-//                    .padding(.bottom, 8)
-//                }
             }
             .listStyle(.plain)
             .refreshable {
                 viewModel.refresh()
             }
+        }
+
+        private var chipsHeader: some SwiftUI.View {
+
+            Controls.Chips.View(viewModel: viewModel.chipsViewModel)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .textCase(nil)
+        }
+
+        private var filteredEmptyRow: some SwiftUI.View {
+
+            Text("No chats for this filter")
+                .font(.body)
+                .foregroundStyle(Color.secondaryText)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 10)
+                .listRowInsets(.init(top: 10, leading: 16, bottom: 10, trailing: 16))
+                .listRowSeparator(.hidden)
         }
 
         private func row(item: Chats.List.Item) -> some SwiftUI.View {

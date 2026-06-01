@@ -17,6 +17,7 @@ extension Controls.Button {
 
             case primary
             case secondary
+            case plainWarning
 
         } // Style
 

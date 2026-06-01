@@ -46,6 +46,11 @@ extension Chats.Dialog.ViewModel {
             dialogAvatarLocalPath
         }
 
+        var messageSections: [Chats.Dialog.ViewModel.MessageSection] {
+
+            makeMessageSections(from: messages)
+        }
+
         var emptyTitle: String {
 
             "No messages yet"
@@ -73,10 +78,13 @@ extension Chats.Dialog.ViewModel {
                 messages = []
                 errorMessage = nil
                 didLoad = false
+                stopMessageEvents()
             }
         }
 
         func onAppear() {
+
+            startMessageEventsIfNeeded()
 
             guard didLoad == false else {
                 return
@@ -84,6 +92,11 @@ extension Chats.Dialog.ViewModel {
 
             didLoad = true
             refresh()
+        }
+
+        func onDisappear() {
+
+            stopMessageEvents()
         }
 
         func refresh() {
@@ -106,6 +119,28 @@ extension Chats.Dialog.ViewModel {
         private var dialogTitle = ""
         private var dialogAvatarLocalPath: String?
         private var didLoad = false
+        private var messageEventsTask: Task<Void, Never>?
+        private var messageEventsChatID: Int64?
+
+        private func makeMessageSections(
+            from messages: [Chats.Dialog.Message]
+        ) -> [Chats.Dialog.ViewModel.MessageSection] {
+
+            let calendar = Calendar.current
+            let groupedMessages = Dictionary(grouping: messages) { message in
+                calendar.startOfDay(for: Date(timeIntervalSince1970: TimeInterval(message.sentAt)))
+            }
+
+            return groupedMessages.keys
+                .sorted()
+                .map { day in
+                    .init(
+                        id: day,
+                        day: day,
+                        messages: groupedMessages[day, default: []].sorted { $0.id < $1.id }
+                    )
+                }
+        }
 
         private func fetchMessageHistory() async {
 
@@ -122,6 +157,96 @@ extension Chats.Dialog.ViewModel {
             } catch {
                 errorMessage = makeErrorMessage(from: error)
             }
+        }
+
+        private func startMessageEventsIfNeeded() {
+
+            guard chatID != 0 else {
+                return
+            }
+
+            guard messageEventsChatID != chatID else {
+                return
+            }
+
+            stopMessageEvents()
+
+            let currentChatID = chatID
+            messageEventsChatID = currentChatID
+            messageEventsTask = Task { [weak self] in
+                guard let self else {
+                    return
+                }
+
+                let events = self.controller.messageEvents(chatID: currentChatID)
+
+                for await event in events {
+                    guard Task.isCancelled == false else {
+                        return
+                    }
+
+                    self.handleMessageEvent(event, expectedChatID: currentChatID)
+                }
+            }
+        }
+
+        private func stopMessageEvents() {
+
+            messageEventsTask?.cancel()
+            messageEventsTask = nil
+            messageEventsChatID = nil
+        }
+
+        private func handleMessageEvent(
+            _ event: Chats.Dialog.Event,
+            expectedChatID: Int64
+        ) {
+
+            guard chatID == expectedChatID else {
+                return
+            }
+
+            switch event {
+            case .messageInserted(let message):
+                guard message.chatID == expectedChatID else {
+                    return
+                }
+
+                upsert(message)
+
+            case .messageUpdated(let message):
+                guard message.chatID == expectedChatID else {
+                    return
+                }
+
+                upsert(message)
+
+            case .messagesDeleted(let chatID, let messageIDs):
+                guard chatID == expectedChatID else {
+                    return
+                }
+
+                messages.removeAll { messageIDs.contains($0.id) }
+
+            case .refreshRequired(let chatID):
+                guard chatID == expectedChatID else {
+                    return
+                }
+
+                refresh()
+            }
+        }
+
+        private func upsert(_ message: Chats.Dialog.Message) {
+
+            if let index = messages.firstIndex(where: { $0.id == message.id }) {
+                messages[index] = message
+            } else {
+                messages.append(message)
+            }
+
+            messages.sort { $0.id < $1.id }
+            errorMessage = nil
         }
 
         private func makeErrorMessage(from error: Swift.Error) -> String {
